@@ -1,0 +1,35 @@
+{
+  "languageTag": "en-US",
+  "fileDescription": "Strings for mikal-volumetric-spot-v1.",
+  "text": {
+    "effects": {
+      "mikal-volumetric-spot-v1": {
+        "name": "Volumetric Spotlight",
+        "description": "Volumetric spotlight scatter effect using ray marching",
+        "parameters": {
+          "cam-x":           { "name": "Camera X",           "description": "Camera position X" },
+          "cam-y":           { "name": "Camera Y",           "description": "Camera position Y" },
+          "cam-z":           { "name": "Camera Z",           "description": "Camera position Z" },
+          "cam-look-x":     { "name": "Look-At X",          "description": "Camera look-at target X" },
+          "cam-look-y":     { "name": "Look-At Y",          "description": "Camera look-at target Y" },
+          "cam-look-z":     { "name": "Look-At Z",          "description": "Camera look-at target Z" },
+          "cam-fov":        { "name": "FOV",                 "description": "Vertical field of view in radians" },
+          "light1-x":       { "name": "Light 1 X",          "description": "Light 1 position X" },
+          "light1-y":       { "name": "Light 1 Y",          "description": "Light 1 position Y" },
+          "light1-z":       { "name": "Light 1 Z",          "description": "Light 1 position Z" },
+          "light1-dir-x":   { "name": "Light 1 Dir X",      "description": "Light 1 direction X (normalized)" },
+          "light1-dir-y":   { "name": "Light 1 Dir Y",      "description": "Light 1 direction Y (normalized)" },
+          "light1-dir-z":   { "name": "Light 1 Dir Z",      "description": "Light 1 direction Z (normalized)" },
+          "light1-color":   { "name": "Light 1 Color",      "description": "Light 1 color" },
+          "light1-intensity":{ "name": "Light 1 Intensity",  "description": "Light 1 brightness multiplier" },
+          "light1-cone-angle":{ "name": "Light 1 Cone Angle","description": "Cosine of spotlight half-angle" },
+          "light1-cone-edge":{ "name": "Light 1 Cone Edge",  "description": "Spotlight edge softness (0-1)" },
+          "light1-atten-c": { "name": "Light 1 Atten C",    "description": "Constant attenuation term" },
+          "light1-atten-l": { "name": "Light 1 Atten L",    "description": "Linear attenuation term" },
+          "light1-atten-q": { "name": "Light 1 Atten Q",    "description": "Quadratic attenuation term" },
+          "debug-mode":    { "name": "Debug Mode",          "description": "0 = normal, 1 = depth, 2 = scatter, 3 = ray dir, 4 = camPos, 5 = vWorldPos" }
+        }
+      }
+    }
+  }
+}
