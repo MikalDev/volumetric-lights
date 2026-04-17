@@ -34,6 +34,8 @@ struct ShaderParams {
     light1AttenQ : f32,
     light1Dust : f32,
     light1DustCount : f32,
+    light1DustSpeed : f32,
+    light1DustFade : f32,
     debugMode : f32,
 };
 
@@ -62,12 +64,6 @@ fn hash31(p_in : vec3<f32>) -> f32 {
     var p = fract(p_in * vec3<f32>(443.897, 441.423, 437.195));
     p = p + dot(p, p.yzx + 19.19);
     return fract((p.x + p.y) * p.z);
-}
-
-fn hash33(p_in : vec3<f32>) -> vec3<f32> {
-    var p = fract(p_in * vec3<f32>(443.897, 441.423, 437.195));
-    p = p + dot(p, p.yzx + 19.19);
-    return fract(vec3<f32>(p.x * p.z, p.y * p.x, p.z * p.y));
 }
 
 fn spotAttenuation(samplePos : vec3<f32>, lightPos : vec3<f32>, lightDir : vec3<f32>,
@@ -171,10 +167,11 @@ fn main(input : FragmentInput) -> FragmentOutput
             let cellSize = 2.0;
             let cell = vec3<f32>(floor(input.fragPos.xy / cellSize), f32(i));
             let density = hash31(cell + 0.5);
-            let window = fract(c3Params.seconds * 0.003);
+            let eligible = step(1.0 - shaderParams.light1DustCount, hash31(cell + 1.0));
+            let window = fract(c3Params.seconds * shaderParams.light1DustSpeed);
             var dist2 = abs(density - window);
             dist2 = min(dist2, 1.0 - dist2);
-            dust = smoothstep(shaderParams.light1DustCount, 0.0, dist2) * shaderParams.light1Dust;
+            dust = smoothstep(shaderParams.light1DustFade, 0.0, dist2) * eligible * shaderParams.light1Dust;
         }
         scatter = scatter + atten * (1.0 + dust * 15.0) * lightColor;
     }

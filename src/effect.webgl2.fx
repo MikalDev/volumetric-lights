@@ -45,6 +45,8 @@ uniform mediump float light1AttenL;
 uniform mediump float light1AttenQ;
 uniform mediump float light1Dust;
 uniform mediump float light1DustCount;
+uniform mediump float light1DustSpeed;
+uniform mediump float light1DustFade;
 uniform mediump float debugMode;
 
 const int STEPS = 8;
@@ -71,12 +73,6 @@ float hash31(vec3 p) {
     p = fract(p * vec3(443.897, 441.423, 437.195));
     p += dot(p, p.yzx + 19.19);
     return fract((p.x + p.y) * p.z);
-}
-
-vec3 hash33(vec3 p) {
-    p = fract(p * vec3(443.897, 441.423, 437.195));
-    p += dot(p, p.yzx + 19.19);
-    return fract(vec3(p.x * p.z, p.y * p.x, p.z * p.y));
 }
 
 float spotAttenuation(vec3 samplePos, vec3 lightPos, vec3 lightDir,
@@ -161,10 +157,11 @@ void main(void) {
             float cellSize = 2.0;
             vec3 cell = vec3(floor(gl_FragCoord.xy / cellSize), float(i));
             float density = hash31(cell + 0.5);
-            float window = fract(seconds * 0.003);
+            float eligible = step(1.0 - light1DustCount, hash31(cell + 1.0));
+            float window = fract(seconds * light1DustSpeed);
             float dist = abs(density - window);
             dist = min(dist, 1.0 - dist);
-            dust = smoothstep(light1DustCount, 0.0, dist) * light1Dust;
+            dust = smoothstep(light1DustFade, 0.0, dist) * eligible * light1Dust;
         }
         scatter += atten * (1.0 + dust * 15.0) * lightColor;
     }
