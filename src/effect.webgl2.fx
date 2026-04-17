@@ -124,7 +124,7 @@ void main(void) {
 
     // Light occlusion: is the light behind geometry along this pixel's ray?
     float lightT = dot(lightPos - camPos, rayDir);
-    if (lightT > zLinear) {
+    if (lightT > zLinear && debugMode < 0.5) {
         outColor = vec4(back.rgb, back.a);
         return;
     }

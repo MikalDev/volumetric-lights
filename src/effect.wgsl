@@ -134,7 +134,7 @@ fn main(input : FragmentInput) -> FragmentOutput
 
     // Light occlusion: is the light behind geometry along this pixel's ray?
     let lightT = dot(lightPos - camPos, rayDir);
-    if (lightT > zLinear) {
+    if (lightT > zLinear && shaderParams.debugMode < 0.5) {
         output.color = vec4<f32>(back.rgb, back.a);
         return output;
     }
