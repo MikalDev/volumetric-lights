@@ -32,6 +32,8 @@ struct ShaderParams {
     light1AttenC : f32,
     light1AttenL : f32,
     light1AttenQ : f32,
+    light1Dust : f32,
+    light1DustCount : f32,
     debugMode : f32,
 };
 
@@ -54,6 +56,18 @@ fn bayerDither4x4(fragCoord : vec2<f32>) -> f32 {
         15,  7, 13,  5
     );
     return f32(bayer[index]) / 16.0;
+}
+
+fn hash31(p_in : vec3<f32>) -> f32 {
+    var p = fract(p_in * vec3<f32>(443.897, 441.423, 437.195));
+    p = p + dot(p, p.yzx + 19.19);
+    return fract((p.x + p.y) * p.z);
+}
+
+fn hash33(p_in : vec3<f32>) -> vec3<f32> {
+    var p = fract(p_in * vec3<f32>(443.897, 441.423, 437.195));
+    p = p + dot(p, p.yzx + 19.19);
+    return fract(vec3<f32>(p.x * p.z, p.y * p.x, p.z * p.y));
 }
 
 fn spotAttenuation(samplePos : vec3<f32>, lightPos : vec3<f32>, lightDir : vec3<f32>,
@@ -152,9 +166,20 @@ fn main(input : FragmentInput) -> FragmentOutput
         let atten = spotAttenuation(samplePos, lightPos, lightDir,
                                      shaderParams.light1ConeAngle, shaderParams.light1ConeEdge,
                                      shaderParams.light1AttenC, shaderParams.light1AttenL, shaderParams.light1AttenQ);
-        scatter = scatter + atten * lightColor;
+        var dust = 0.0;
+        if (atten > 0.001 && shaderParams.light1Dust > 0.0 && t < maxDist * 0.9) {
+            let cellSize = 2.0;
+            let cell = vec3<f32>(floor(input.fragPos.xy / cellSize), f32(i));
+            let density = hash31(cell + 0.5);
+            let window = fract(c3Params.seconds * 0.003);
+            var dist2 = abs(density - window);
+            dist2 = min(dist2, 1.0 - dist2);
+            dust = smoothstep(shaderParams.light1DustCount, 0.0, dist2) * shaderParams.light1Dust;
+        }
+        scatter = scatter + atten * (1.0 + dust * 15.0) * lightColor;
     }
     scatter = scatter / f32(STEPS);
+    scatter = min(scatter, vec3<f32>(1.0, 1.0, 1.0));
 
     // Debug mode 2: scatter only (amplified, on black)
     if (shaderParams.debugMode > 1.5 && shaderParams.debugMode < 2.5) {

@@ -43,6 +43,8 @@ uniform mediump float light1ConeEdge;
 uniform mediump float light1AttenC;
 uniform mediump float light1AttenL;
 uniform mediump float light1AttenQ;
+uniform mediump float light1Dust;
+uniform mediump float light1DustCount;
 uniform mediump float debugMode;
 
 const int STEPS = 8;
@@ -63,6 +65,18 @@ float bayerDither4x4(vec2 fragCoord) {
         15,  7, 13,  5
     );
     return float(bayer[index]) / 16.0;
+}
+
+float hash31(vec3 p) {
+    p = fract(p * vec3(443.897, 441.423, 437.195));
+    p += dot(p, p.yzx + 19.19);
+    return fract((p.x + p.y) * p.z);
+}
+
+vec3 hash33(vec3 p) {
+    p = fract(p * vec3(443.897, 441.423, 437.195));
+    p += dot(p, p.yzx + 19.19);
+    return fract(vec3(p.x * p.z, p.y * p.x, p.z * p.y));
 }
 
 float spotAttenuation(vec3 samplePos, vec3 lightPos, vec3 lightDir,
@@ -142,9 +156,20 @@ void main(void) {
         float atten = spotAttenuation(samplePos, lightPos, lightDir,
                                        light1ConeAngle, light1ConeEdge,
                                        light1AttenC, light1AttenL, light1AttenQ);
-        scatter += atten * lightColor;
+        float dust = 0.0;
+        if (atten > 0.001 && light1Dust > 0.0 && t < maxDist * 0.9) {
+            float cellSize = 2.0;
+            vec3 cell = vec3(floor(gl_FragCoord.xy / cellSize), float(i));
+            float density = hash31(cell + 0.5);
+            float window = fract(seconds * 0.003);
+            float dist = abs(density - window);
+            dist = min(dist, 1.0 - dist);
+            dust = smoothstep(light1DustCount, 0.0, dist) * light1Dust;
+        }
+        scatter += atten * (1.0 + dust * 15.0) * lightColor;
     }
     scatter /= float(STEPS);
+    scatter = min(scatter, vec3(1.0));
 
     // Debug mode 2: scatter only (amplified, on black)
     if (debugMode > 1.5 && debugMode < 2.5) {

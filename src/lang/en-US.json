@@ -27,6 +27,8 @@
           "light1-atten-c": { "name": "Light 1 Atten C",    "description": "Constant attenuation term" },
           "light1-atten-l": { "name": "Light 1 Atten L",    "description": "Linear attenuation term" },
           "light1-atten-q": { "name": "Light 1 Atten Q",    "description": "Quadratic attenuation term" },
+          "light1-dust":   { "name": "Light 1 Dust",       "description": "Dust particle intensity (0-1)" },
+          "light1-dust-count":{ "name": "Light 1 Dust Count", "description": "Dust particle density - width of activation window (0.001-0.05)" },
           "debug-mode":    { "name": "Debug Mode",          "description": "0 = normal, 1 = depth, 2 = scatter, 3 = ray dir, 4 = camPos, 5 = vWorldPos" }
         }
       }
