@@ -51,6 +51,7 @@
     { "id": "light1-dust-count","type": "float","initial-value": 0.005,   "uniform": "light1DustCount" },
     { "id": "light1-dust-speed","type": "float","initial-value": 0.003,   "uniform": "light1DustSpeed" },
     { "id": "light1-dust-fade","type": "float","initial-value": 0.003,   "uniform": "light1DustFade" },
+    { "id": "light1-dust-drift","type": "float","initial-value": 0.5,   "uniform": "light1DustDrift" },
     { "id": "debug-mode",    "type": "float", "initial-value": 0,        "uniform": "debugMode" }
   ]
 }

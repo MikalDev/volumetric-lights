@@ -36,6 +36,7 @@ struct ShaderParams {
     light1DustCount : f32,
     light1DustSpeed : f32,
     light1DustFade : f32,
+    light1DustDrift : f32,
     debugMode : f32,
 };
 
@@ -154,8 +155,10 @@ fn main(input : FragmentInput) -> FragmentOutput
     let stepSize = maxDist / f32(STEPS);
     let jitter = bayerDither4x4(input.fragPos.xy);
 
-    // Accumulate scatter
+    // Accumulate scatter and dust separately
     var scatter = vec3<f32>(0.0, 0.0, 0.0);
+    var dustAccum = vec3<f32>(0.0, 0.0, 0.0);
+    var dustAlpha = 0.0;
     for (var i = 0; i < STEPS; i = i + 1) {
         let t = (f32(i) + jitter) * stepSize;
         let samplePos = camPos + rayDir * t;
@@ -166,17 +169,31 @@ fn main(input : FragmentInput) -> FragmentOutput
         if (atten > 0.001 && shaderParams.light1Dust > 0.0 && t < maxDist * 0.9) {
             let cellSize = 2.0;
             let cell = vec3<f32>(floor(input.fragPos.xy / cellSize), f32(i));
-            let density = hash31(cell + 0.5);
             let eligible = step(1.0 - shaderParams.light1DustCount, hash31(cell + 1.0));
+            // Per-particle smooth drift (sine oscillation, random direction + phase)
+            let driftAngle = hash31(cell + 3.0) * 6.2832;
+            let driftPhase = hash31(cell + 5.0) * 6.2832;
+            let particlePos = (cell.xy + 0.5) * cellSize
+                + vec2<f32>(cos(driftAngle), sin(driftAngle))
+                * sin(c3Params.seconds * shaderParams.light1DustDrift + driftPhase) * cellSize;
+            let pDist = length(input.fragPos.xy - particlePos) / cellSize;
+            let spatial = smoothstep(1.0, 0.0, pDist);
+            let density = hash31(cell + 0.5);
             let window = fract(c3Params.seconds * shaderParams.light1DustSpeed);
             var dist2 = abs(density - window);
             dist2 = min(dist2, 1.0 - dist2);
-            dust = smoothstep(shaderParams.light1DustFade, 0.0, dist2) * eligible * shaderParams.light1Dust;
+            dust = smoothstep(shaderParams.light1DustFade, 0.0, dist2) * spatial * eligible * shaderParams.light1Dust;
         }
-        scatter = scatter + atten * (1.0 + dust * 15.0) * lightColor;
+        scatter = scatter + atten * lightColor;
+        // Dust: accumulate color and opacity for opaque blending
+        let dustStrength = dust * atten;
+        dustAccum = dustAccum + dustStrength * lightColor;
+        dustAlpha = dustAlpha + dustStrength;
     }
     scatter = scatter / f32(STEPS);
     scatter = min(scatter, vec3<f32>(1.0, 1.0, 1.0));
+    dustAlpha = clamp(dustAlpha, 0.0, 1.0);
+    let dustColor = select(vec3<f32>(0.0, 0.0, 0.0), dustAccum / dustAlpha, dustAlpha > 0.001);
 
     // Debug mode 2: scatter only (amplified, on black)
     if (shaderParams.debugMode > 1.5 && shaderParams.debugMode < 2.5) {
@@ -184,8 +201,10 @@ fn main(input : FragmentInput) -> FragmentOutput
         return output;
     }
 
-    // Additive output — scatter needs alpha to be visible on transparent layers
+    // Additive scatter, then opaque dust on top
+    var result = back.rgb + scatter;
+    result = mix(result, dustColor, dustAlpha);
     let scatterLum = max(scatter.r, max(scatter.g, scatter.b));
-    output.color = vec4<f32>(back.rgb + scatter, max(back.a, scatterLum));
+    output.color = vec4<f32>(result, max(back.a, max(scatterLum, dustAlpha)));
     return output;
 }

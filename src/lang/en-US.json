@@ -31,6 +31,7 @@
           "light1-dust-count":{ "name": "Light 1 Dust Count", "description": "Dust particle density (0.001-0.05)" },
           "light1-dust-speed":{ "name": "Light 1 Dust Speed", "description": "Dust fade cycle speed (0.001=slow, 0.01=fast)" },
           "light1-dust-fade":{ "name": "Light 1 Dust Fade",  "description": "Dust fade transition width (0.001=sharp, 0.02=soft)" },
+          "light1-dust-drift":{ "name": "Light 1 Dust Drift", "description": "Dust spatial drift speed (0=static, 0.5=gentle, 2=fast)" },
           "debug-mode":    { "name": "Debug Mode",          "description": "0 = normal, 1 = depth, 2 = scatter, 3 = ray direction" }
         }
       }

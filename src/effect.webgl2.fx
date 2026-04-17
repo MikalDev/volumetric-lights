@@ -47,6 +47,7 @@ uniform mediump float light1Dust;
 uniform mediump float light1DustCount;
 uniform mediump float light1DustSpeed;
 uniform mediump float light1DustFade;
+uniform mediump float light1DustDrift;
 uniform mediump float debugMode;
 
 const int STEPS = 8;
@@ -144,8 +145,10 @@ void main(void) {
     float stepSize = maxDist / float(STEPS);
     float jitter = bayerDither4x4(gl_FragCoord.xy);
 
-    // Accumulate scatter
+    // Accumulate scatter and dust separately
     vec3 scatter = vec3(0.0);
+    vec3 dustAccum = vec3(0.0);
+    float dustAlpha = 0.0;
     for (int i = 0; i < STEPS; i++) {
         float t = (float(i) + jitter) * stepSize;
         vec3 samplePos = camPos + rayDir * t;
@@ -156,17 +159,31 @@ void main(void) {
         if (atten > 0.001 && light1Dust > 0.0 && t < maxDist * 0.9) {
             float cellSize = 2.0;
             vec3 cell = vec3(floor(gl_FragCoord.xy / cellSize), float(i));
-            float density = hash31(cell + 0.5);
             float eligible = step(1.0 - light1DustCount, hash31(cell + 1.0));
+            // Per-particle smooth drift (sine oscillation, random direction + phase)
+            float driftAngle = hash31(cell + 3.0) * 6.2832;
+            float driftPhase = hash31(cell + 5.0) * 6.2832;
+            vec2 particlePos = (cell.xy + 0.5) * cellSize
+                + vec2(cos(driftAngle), sin(driftAngle))
+                * sin(seconds * light1DustDrift + driftPhase) * cellSize;
+            float pDist = length(gl_FragCoord.xy - particlePos) / cellSize;
+            float spatial = smoothstep(1.0, 0.0, pDist);
+            float density = hash31(cell + 0.5);
             float window = fract(seconds * light1DustSpeed);
             float dist = abs(density - window);
             dist = min(dist, 1.0 - dist);
-            dust = smoothstep(light1DustFade, 0.0, dist) * eligible * light1Dust;
+            dust = smoothstep(light1DustFade, 0.0, dist) * spatial * eligible * light1Dust;
         }
-        scatter += atten * (1.0 + dust * 15.0) * lightColor;
+        scatter += atten * lightColor;
+        // Dust: accumulate color and opacity for opaque blending
+        float dustStrength = dust * atten;
+        dustAccum += dustStrength * lightColor;
+        dustAlpha += dustStrength;
     }
     scatter /= float(STEPS);
     scatter = min(scatter, vec3(1.0));
+    dustAlpha = clamp(dustAlpha, 0.0, 1.0);
+    vec3 dustColor = dustAlpha > 0.001 ? dustAccum / dustAlpha : vec3(0.0);
 
     // Debug mode 2: scatter only (amplified, on black)
     if (debugMode > 1.5 && debugMode < 2.5) {
@@ -174,7 +191,9 @@ void main(void) {
         return;
     }
 
-    // Additive output — scatter needs alpha to be visible on transparent layers
+    // Additive scatter, then opaque dust on top
+    vec3 result = back.rgb + scatter;
+    result = mix(result, dustColor, dustAlpha);
     float scatterLum = max(scatter.r, max(scatter.g, scatter.b));
-    outColor = vec4(back.rgb + scatter, max(back.a, scatterLum));
+    outColor = vec4(result, max(back.a, max(scatterLum, dustAlpha)));
 }
