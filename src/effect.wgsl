@@ -200,10 +200,10 @@ fn main(input : FragmentInput) -> FragmentOutput
         return output;
     }
 
-    // Additive scatter, then opaque dust on top
-    var result = back.rgb + scatter;
+    // Extinction + additive scatter, then opaque dust on top
+    let scatterLum = clamp(max(scatter.r, max(scatter.g, scatter.b)), 0.0, 1.0);
+    var result = back.rgb * (1.0 - scatterLum) + scatter;
     result = mix(result, dustColor, dustAlpha);
-    let scatterLum = max(scatter.r, max(scatter.g, scatter.b));
     output.color = vec4<f32>(result, max(back.a, max(scatterLum, dustAlpha)));
     return output;
 }

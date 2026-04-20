@@ -201,9 +201,9 @@ void main(void) {
         return;
     }
 
-    // Additive scatter, then opaque dust on top
-    vec3 result = back.rgb + scatter;
+    // Extinction + additive scatter, then opaque dust on top
+    float scatterLum = clamp(max(scatter.r, max(scatter.g, scatter.b)), 0.0, 1.0);
+    vec3 result = back.rgb * (1.0 - scatterLum) + scatter;
     result = mix(result, dustColor, dustAlpha);
-    float scatterLum = max(scatter.r, max(scatter.g, scatter.b));
     outColor = vec4(result, max(back.a, max(scatterLum, dustAlpha)));
 }
