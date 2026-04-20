@@ -13,14 +13,14 @@ uniform mediump vec2 srcOriginEnd;
 uniform mediump vec2 layoutStart;
 uniform mediump vec2 layoutEnd;
 uniform lowp float seconds;
-uniform mediump float pixelSize;
+uniform mediump vec2 pixelSize;
 uniform mediump float zNear;
 uniform mediump float zFar;
 uniform mediump sampler2D samplerDepth;
 uniform highp mat4 matP;
 uniform highp mat4 matMV;
 
-// Camera (used by WGSL path; WebGL2 uses matP/matMV instead)
+// Camera
 uniform mediump float camX;
 uniform mediump float camY;
 uniform mediump float camZ;
@@ -28,6 +28,9 @@ uniform mediump float camLookX;
 uniform mediump float camLookY;
 uniform mediump float camLookZ;
 uniform mediump float camFov;
+uniform mediump float camLookUpX;
+uniform mediump float camLookUpY;
+uniform mediump float camLookUpZ;
 
 // Light 1
 uniform mediump float light1X;
@@ -104,15 +107,21 @@ void main(void) {
     float rawDepth = texture(samplerDepth, vTex).r;
     float zLinear = linearizeDepth(rawDepth);
 
-    // Camera position from inverse model-view matrix
-    mat3 rotMV = mat3(matMV);
-    vec3 camPos = -(transpose(rotMV) * matMV[3].xyz);
+    // Camera basis vectors from uniforms (C3: -Y is up)
+    vec3 camPos = vec3(camX, camY, camZ);
+    vec3 forward = normalize(vec3(camLookX, camLookY, camLookZ));
+    vec3 worldUp = vec3(camLookUpX, camLookUpY, camLookUpZ);
+    vec3 right = normalize(cross(worldUp, forward));
+    vec3 up = cross(forward, right);
 
-    // Ray direction: unproject screen UV through inverse projection + inverse view
+    // Screen UV to ray direction
     vec2 uv = (vTex - srcStart) / (srcEnd - srcStart);
-    vec2 ndc = uv * 2.0 - 1.0;
-    vec3 viewDir = normalize(vec3(ndc.x / matP[0][0], ndc.y / matP[1][1], -1.0));
-    vec3 rayDir = normalize(transpose(rotMV) * viewDir);
+    float aspect = pixelSize.y / pixelSize.x;
+    float halfH = tan(camFov * 0.5);
+    vec2 screen = uv * 2.0 - 1.0;
+    screen.x *= aspect * halfH;
+    screen.y *= -halfH;  // negate: UV y=0 is top, camera up is +screen.y
+    vec3 rayDir = normalize(forward + screen.x * right + screen.y * up);
 
     // Debug mode 1: depth heat map (red=near, green=mid, blue=far)
     if (debugMode > 0.5 && debugMode < 1.5) {
@@ -135,13 +144,14 @@ void main(void) {
 
     // Light occlusion: is the light behind geometry along this pixel's ray?
     float lightT = dot(lightPos - camPos, rayDir);
-    if (lightT > zLinear && debugMode < 0.5) {
+    float maxRayDist = zLinear / dot(rayDir, forward);
+    if (lightT > maxRayDist && debugMode < 0.5) {
         outColor = vec4(back.rgb, back.a);
         return;
     }
 
-    // Ray march setup — clamp max distance to avoid sky blowout
-    float maxDist = min(zLinear, zFar * 0.99);
+    // Ray march setup — clamp to avoid sky blowout
+    float maxDist = min(maxRayDist, zFar * 0.99);
     float stepSize = maxDist / float(STEPS);
     float jitter = bayerDither4x4(gl_FragCoord.xy);
 

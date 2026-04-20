@@ -19,6 +19,9 @@ struct ShaderParams {
     camLookY : f32,
     camLookZ : f32,
     camFov : f32,
+    camLookUpX : f32,
+    camLookUpY : f32,
+    camLookUpZ : f32,
     light1X : f32,
     light1Y : f32,
     light1Z : f32,
@@ -112,20 +115,15 @@ fn main(input : FragmentInput) -> FragmentOutput
 
     // Camera basis vectors (C3: -Y is up)
     let camPos = vec3<f32>(shaderParams.camX, shaderParams.camY, shaderParams.camZ);
-    let lookAt = vec3<f32>(shaderParams.camLookX, shaderParams.camLookY, shaderParams.camLookZ);
-    let forward = normalize(lookAt - camPos);
-    var worldUp = vec3<f32>(0.0, -1.0, 0.0);
-    // Fallback if camera looks straight along world up (gimbal lock)
-    if (abs(dot(forward, worldUp)) > 0.999) {
-        worldUp = vec3<f32>(0.0, 0.0, 1.0);
-    }
-    let right = normalize(cross(forward, worldUp));
-    let up = cross(right, forward);
+    let forward = normalize(vec3<f32>(shaderParams.camLookX, shaderParams.camLookY, shaderParams.camLookZ));
+    let worldUp = vec3<f32>(shaderParams.camLookUpX, shaderParams.camLookUpY, shaderParams.camLookUpZ);
+    let right = normalize(cross(worldUp, forward));
+    let up = cross(forward, right);
 
     // Screen UV to ray direction
     let srcSize = c3Params.srcEnd - c3Params.srcStart;
     let uv = (input.fragUV - c3Params.srcStart) / srcSize;
-    let aspect = abs(srcSize.x / srcSize.y);
+    let aspect = c3Params.pixelSize.y / c3Params.pixelSize.x;
     let halfH = tan(shaderParams.camFov * 0.5);
     var screen = uv * 2.0 - 1.0;
     screen.x = screen.x * aspect * halfH;
@@ -145,13 +143,14 @@ fn main(input : FragmentInput) -> FragmentOutput
 
     // Light occlusion: is the light behind geometry along this pixel's ray?
     let lightT = dot(lightPos - camPos, rayDir);
-    if (lightT > zLinear && shaderParams.debugMode < 0.5) {
+    let maxRayDist = zLinear / dot(rayDir, forward);
+    if (lightT > maxRayDist && shaderParams.debugMode < 0.5) {
         output.color = vec4<f32>(back.rgb, back.a);
         return output;
     }
 
-    // Ray march setup — clamp max distance to avoid sky blowout
-    let maxDist = min(zLinear, c3Params.zFar * 0.99);
+    // Ray march setup — clamp to avoid sky blowout
+    let maxDist = min(maxRayDist, c3Params.zFar * 0.99);
     let stepSize = maxDist / f32(STEPS);
     let jitter = bayerDither4x4(input.fragPos.xy);
 
