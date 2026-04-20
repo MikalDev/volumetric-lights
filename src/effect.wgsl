@@ -137,8 +137,8 @@ fn main(input : FragmentInput) -> FragmentOutput
     }
 
     // Light params
-    let lightPos = vec3<f32>(shaderParams.light1X, shaderParams.light1Y, shaderParams.light1Z);
-    let lightDir = normalize(vec3<f32>(shaderParams.light1DirX, shaderParams.light1DirY, shaderParams.light1DirZ));
+    let lightPos = vec3<f32>(shaderParams.light1X, shaderParams.light1Y, -shaderParams.light1Z);
+    let lightDir = normalize(vec3<f32>(shaderParams.light1DirX, shaderParams.light1DirY, -shaderParams.light1DirZ));
     let lightColor = shaderParams.light1Color * shaderParams.light1Intensity;
 
     // Light occlusion: is the light behind geometry along this pixel's ray?

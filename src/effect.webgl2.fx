@@ -138,8 +138,8 @@ void main(void) {
     }
 
     // Light params
-    vec3 lightPos = vec3(light1X, light1Y, light1Z);
-    vec3 lightDir = normalize(vec3(light1DirX, light1DirY, light1DirZ));
+    vec3 lightPos = vec3(light1X, light1Y, -light1Z);
+    vec3 lightDir = normalize(vec3(light1DirX, light1DirY, -light1DirZ));
     vec3 lightColor = light1Color * light1Intensity;
 
     // Light occlusion: is the light behind geometry along this pixel's ray?
