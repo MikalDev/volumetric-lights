@@ -55,6 +55,9 @@
     { "id": "light1-dust-speed","type": "float","initial-value": 0.003,   "uniform": "light1DustSpeed" },
     { "id": "light1-dust-fade","type": "float","initial-value": 0.003,   "uniform": "light1DustFade" },
     { "id": "light1-dust-drift","type": "float","initial-value": 0.5,   "uniform": "light1DustDrift" },
+    { "id": "light1-shadow",       "type": "float", "initial-value": 0,   "uniform": "light1Shadow" },
+    { "id": "light1-shadow-steps","type": "float", "initial-value": 4,   "uniform": "light1ShadowSteps" },
+    { "id": "light1-shadow-bias", "type": "float", "initial-value": 5,   "uniform": "light1ShadowBias" },
     { "id": "debug-mode",    "type": "float", "initial-value": 0,        "uniform": "debugMode" }
   ]
 }

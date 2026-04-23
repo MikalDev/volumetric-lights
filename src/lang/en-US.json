@@ -35,6 +35,9 @@
           "light1-dust-speed":{ "name": "Light 1 Dust Speed", "description": "Dust fade cycle speed (0.001=slow, 0.01=fast)" },
           "light1-dust-fade":{ "name": "Light 1 Dust Fade",  "description": "Dust fade transition width (0.001=sharp, 0.02=soft)" },
           "light1-dust-drift":{ "name": "Light 1 Dust Drift", "description": "Dust spatial drift speed (0=static, 0.5=gentle, 2=fast)" },
+          "light1-shadow":      { "name": "Light 1 Shadow",       "description": "Screen-space shadow intensity (0=off, 1=full). Expensive." },
+          "light1-shadow-steps":{ "name": "Light 1 Shadow Steps", "description": "Shadow substeps per sample (1-32, default 4). More = smoother but slower." },
+          "light1-shadow-bias": { "name": "Light 1 Shadow Bias",  "description": "Depth bias in world units to prevent self-shadowing (default 5)" },
           "debug-mode":    { "name": "Debug Mode",          "description": "0 = normal, 1 = depth, 2 = scatter, 3 = ray direction" }
         }
       }

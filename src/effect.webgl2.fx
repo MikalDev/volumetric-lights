@@ -51,6 +51,9 @@ uniform mediump float light1DustCount;
 uniform mediump float light1DustSpeed;
 uniform mediump float light1DustFade;
 uniform mediump float light1DustDrift;
+uniform mediump float light1Shadow;
+uniform mediump float light1ShadowSteps;
+uniform mediump float light1ShadowBias;
 uniform mediump float debugMode;
 
 const int STEPS = 8;
@@ -97,6 +100,38 @@ float spotAttenuation(vec3 samplePos, vec3 lightPos, vec3 lightDir,
     float atten = 1.0 / ((1.0 + attenC) + d * attenL + d * d * attenQ);
 
     return cone * atten;
+}
+
+float screenSpaceShadow(vec3 samplePos, vec3 lightPos,
+                        vec3 camPos, vec3 fwd, vec3 right, vec3 up,
+                        float halfH, float aspect,
+                        vec2 srcSt, vec2 srcEn, int steps, float bias) {
+    vec3 toLight = lightPos - samplePos;
+    float dist = length(toLight);
+    if (dist < 0.1) return 1.0;
+
+    vec3 dir = toLight / dist;
+    float substep = dist / float(steps + 1);
+    float occluded = 0.0;
+
+    for (int j = 1; j <= steps; j++) {
+        vec3 subPos = samplePos + dir * (float(j) * substep);
+        vec3 offset = subPos - camPos;
+        float viewZ = dot(offset, fwd);
+        if (viewZ <= 0.0) continue;
+
+        float viewX = dot(offset, right);
+        float viewY = dot(offset, up);
+        float uvX = (viewX / (viewZ * aspect * halfH)) * 0.5 + 0.5;
+        float uvY = (viewY / (viewZ * -halfH)) * 0.5 + 0.5;
+        if (uvX < 0.0 || uvX > 1.0 || uvY < 0.0 || uvY > 1.0) continue;
+
+        vec2 texUV = srcSt + (srcEn - srcSt) * vec2(uvX, uvY);
+        float bufferZ = linearizeDepth(texture(samplerDepth, texUV).r);
+        if (bufferZ < viewZ - bias) occluded += 1.0;
+    }
+
+    return 1.0 - occluded / float(steps);
 }
 
 void main(void) {
@@ -184,9 +219,16 @@ void main(void) {
             dist = min(dist, 1.0 - dist);
             dust = smoothstep(light1DustFade, 0.0, dist) * spatial * eligible * light1Dust;
         }
-        scatter += atten * lightColor;
+        float shadow = 1.0;
+        if (light1Shadow > 0.001 && atten > 0.001) {
+            int ssteps = int(clamp(light1ShadowSteps, 1.0, 32.0));
+            shadow = mix(1.0, screenSpaceShadow(samplePos, lightPos,
+                         camPos, forward, right, up, halfH, aspect,
+                         srcStart, srcEnd, ssteps, light1ShadowBias), light1Shadow);
+        }
+        scatter += atten * shadow * lightColor;
         // Dust: accumulate color and opacity for opaque blending
-        float dustStrength = dust * atten;
+        float dustStrength = dust * atten * shadow;
         dustAccum += dustStrength * lightColor;
         dustAlpha += dustStrength;
     }

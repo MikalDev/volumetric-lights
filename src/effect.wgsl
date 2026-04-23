@@ -40,6 +40,9 @@ struct ShaderParams {
     light1DustSpeed : f32,
     light1DustFade : f32,
     light1DustDrift : f32,
+    light1Shadow : f32,
+    light1ShadowSteps : f32,
+    light1ShadowBias : f32,
     debugMode : f32,
 };
 
@@ -90,6 +93,46 @@ fn spotAttenuation(samplePos : vec3<f32>, lightPos : vec3<f32>, lightDir : vec3<
     let atten = 1.0 / ((1.0 + attenC) + d * attenL + d * d * attenQ);
 
     return cone * atten;
+}
+
+fn screenSpaceShadow(samplePos : vec3<f32>, lightPos : vec3<f32>,
+                     camPos : vec3<f32>, fwd : vec3<f32>, right : vec3<f32>, up : vec3<f32>,
+                     halfH : f32, aspect : f32,
+                     srcSt : vec2<f32>, srcEn : vec2<f32>, steps : i32, bias : f32) -> f32 {
+    let toLight = lightPos - samplePos;
+    let dist = length(toLight);
+    if (dist < 0.1) {
+        return 1.0;
+    }
+
+    let dir = toLight / dist;
+    let substep = dist / f32(steps + 1);
+    var occluded = 0.0;
+
+    for (var j = 1; j <= steps; j = j + 1) {
+        let subPos = samplePos + dir * (f32(j) * substep);
+        let offset = subPos - camPos;
+        let viewZ = dot(offset, fwd);
+        if (viewZ <= 0.0) {
+            continue;
+        }
+
+        let viewX = dot(offset, right);
+        let viewY = dot(offset, up);
+        let uvX = (viewX / (viewZ * aspect * halfH)) * 0.5 + 0.5;
+        let uvY = (viewY / (viewZ * -halfH)) * 0.5 + 0.5;
+        if (uvX < 0.0 || uvX > 1.0 || uvY < 0.0 || uvY > 1.0) {
+            continue;
+        }
+
+        let texUV = srcSt + (srcEn - srcSt) * vec2<f32>(uvX, uvY);
+        let bufferZ = c3_linearizeDepth(textureSample(textureDepth, samplerDepth, texUV));
+        if (bufferZ < viewZ - bias) {
+            occluded = occluded + 1.0;
+        }
+    }
+
+    return 1.0 - occluded / f32(steps);
 }
 
 @fragment
@@ -183,9 +226,16 @@ fn main(input : FragmentInput) -> FragmentOutput
             dist2 = min(dist2, 1.0 - dist2);
             dust = smoothstep(shaderParams.light1DustFade, 0.0, dist2) * spatial * eligible * shaderParams.light1Dust;
         }
-        scatter = scatter + atten * lightColor;
+        var shadow = 1.0;
+        if (shaderParams.light1Shadow > 0.001 && atten > 0.001) {
+            let ssteps = i32(clamp(shaderParams.light1ShadowSteps, 1.0, 32.0));
+            shadow = mix(1.0, screenSpaceShadow(samplePos, lightPos,
+                         camPos, forward, right, up, halfH, aspect,
+                         c3Params.srcStart, c3Params.srcEnd, ssteps, shaderParams.light1ShadowBias), shaderParams.light1Shadow);
+        }
+        scatter = scatter + atten * shadow * lightColor;
         // Dust: accumulate color and opacity for opaque blending
-        let dustStrength = dust * atten;
+        let dustStrength = dust * atten * shadow;
         dustAccum = dustAccum + dustStrength * lightColor;
         dustAlpha = dustAlpha + dustStrength;
     }
