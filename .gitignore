@@ -1,0 +1,4 @@
+dist/
+/*.c3addon
+/*.zip
+.claude/settings.local.json
