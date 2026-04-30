@@ -105,33 +105,45 @@ float spotAttenuation(vec3 samplePos, vec3 lightPos, vec3 lightDir,
 float screenSpaceShadow(vec3 samplePos, vec3 lightPos,
                         vec3 camPos, vec3 fwd, vec3 right, vec3 up,
                         float halfH, float aspect,
-                        vec2 srcSt, vec2 srcEn, int steps, float bias) {
-    vec3 toLight = lightPos - samplePos;
-    float dist = length(toLight);
-    if (dist < 0.1) return 1.0;
+                        vec2 srcSt, vec2 srcEn, vec2 pxSize,
+                        int steps, float bias) {
+    // Project sample point to screen UV + view depth
+    vec3 sOff = samplePos - camPos;
+    float sViewZ = dot(sOff, fwd);
+    if (sViewZ <= 0.0) return 1.0;
+    vec2 sUV = vec2(
+        (dot(sOff, right) / (sViewZ * aspect * halfH)) * 0.5 + 0.5,
+        (dot(sOff, up) / (sViewZ * -halfH)) * 0.5 + 0.5
+    );
 
-    vec3 dir = toLight / dist;
-    float substep = dist / float(steps + 1);
-    float occluded = 0.0;
+    // Project light to screen UV + view depth
+    vec3 lOff = lightPos - camPos;
+    float lViewZ = dot(lOff, fwd);
+    if (lViewZ <= 0.0) return 1.0;
+    vec2 lUV = vec2(
+        (dot(lOff, right) / (lViewZ * aspect * halfH)) * 0.5 + 0.5,
+        (dot(lOff, up) / (lViewZ * -halfH)) * 0.5 + 0.5
+    );
 
-    for (int j = 1; j <= steps; j++) {
-        vec3 subPos = samplePos + dir * (float(j) * substep);
-        vec3 offset = subPos - camPos;
-        float viewZ = dot(offset, fwd);
-        if (viewZ <= 0.0) continue;
+    // Adaptive step count: ~1 step per 4 pixels, minimum user steps, cap at 4x
+    float screenPixels = length((lUV - sUV) / pxSize);
+    int actualSteps = min(max(steps, int(screenPixels * 0.25)), steps * 4);
 
-        float viewX = dot(offset, right);
-        float viewY = dot(offset, up);
-        float uvX = (viewX / (viewZ * aspect * halfH)) * 0.5 + 0.5;
-        float uvY = (viewY / (viewZ * -halfH)) * 0.5 + 0.5;
-        if (uvX < 0.0 || uvX > 1.0 || uvY < 0.0 || uvY > 1.0) continue;
+    // March in screen space — uniform UV steps, perspective-correct depth
+    float invSZ = 1.0 / sViewZ;
+    float invLZ = 1.0 / lViewZ;
+    for (int j = 1; j <= actualSteps; j++) {
+        float frac = float(j) / float(actualSteps + 1);
+        vec2 uv = mix(sUV, lUV, frac);
+        if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) continue;
 
-        vec2 texUV = srcSt + (srcEn - srcSt) * vec2(uvX, uvY);
+        float expectedZ = 1.0 / mix(invSZ, invLZ, frac);
+        vec2 texUV = srcSt + (srcEn - srcSt) * uv;
         float bufferZ = linearizeDepth(texture(samplerDepth, texUV).r);
-        if (bufferZ < viewZ - bias) occluded += 1.0;
+        if (bufferZ < expectedZ - bias) return 0.0;
     }
 
-    return 1.0 - occluded / float(steps);
+    return 1.0;
 }
 
 void main(void) {
@@ -177,15 +189,8 @@ void main(void) {
     vec3 lightDir = normalize(vec3(light1DirX, light1DirY, -light1DirZ));
     vec3 lightColor = light1Color * light1Intensity;
 
-    // Light occlusion: is the light behind geometry along this pixel's ray?
-    float lightT = dot(lightPos - camPos, rayDir);
+    // Ray march setup — depth-limited to stop at solid surfaces
     float maxRayDist = zLinear / dot(rayDir, forward);
-    if (lightT > maxRayDist && debugMode < 0.5) {
-        outColor = vec4(back.rgb, back.a);
-        return;
-    }
-
-    // Ray march setup — clamp to avoid sky blowout
     float maxDist = min(maxRayDist, zFar * 0.99);
     float stepSize = maxDist / float(STEPS);
     float jitter = bayerDither4x4(gl_FragCoord.xy);
@@ -221,10 +226,10 @@ void main(void) {
         }
         float shadow = 1.0;
         if (light1Shadow > 0.001 && atten > 0.001) {
-            int ssteps = int(clamp(light1ShadowSteps, 1.0, 32.0));
-            shadow = mix(1.0, screenSpaceShadow(samplePos, lightPos,
+            int ssteps = int(clamp(light1ShadowSteps, 1.0, 16.0));
+            shadow = screenSpaceShadow(samplePos, lightPos,
                          camPos, forward, right, up, halfH, aspect,
-                         srcStart, srcEnd, ssteps, light1ShadowBias), light1Shadow);
+                         srcStart, srcEnd, pixelSize, ssteps, light1ShadowBias);
         }
         scatter += atten * shadow * lightColor;
         // Dust: accumulate color and opacity for opaque blending

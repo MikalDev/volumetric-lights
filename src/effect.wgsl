@@ -98,41 +98,53 @@ fn spotAttenuation(samplePos : vec3<f32>, lightPos : vec3<f32>, lightDir : vec3<
 fn screenSpaceShadow(samplePos : vec3<f32>, lightPos : vec3<f32>,
                      camPos : vec3<f32>, fwd : vec3<f32>, right : vec3<f32>, up : vec3<f32>,
                      halfH : f32, aspect : f32,
-                     srcSt : vec2<f32>, srcEn : vec2<f32>, steps : i32, bias : f32) -> f32 {
-    let toLight = lightPos - samplePos;
-    let dist = length(toLight);
-    if (dist < 0.1) {
+                     srcSt : vec2<f32>, srcEn : vec2<f32>, pxSize : vec2<f32>,
+                     steps : i32, bias : f32) -> f32 {
+    // Project sample point to screen UV + view depth
+    let sOff = samplePos - camPos;
+    let sViewZ = dot(sOff, fwd);
+    if (sViewZ <= 0.0) {
         return 1.0;
     }
+    let sUV = vec2<f32>(
+        (dot(sOff, right) / (sViewZ * aspect * halfH)) * 0.5 + 0.5,
+        (dot(sOff, up) / (sViewZ * -halfH)) * 0.5 + 0.5
+    );
 
-    let dir = toLight / dist;
-    let substep = dist / f32(steps + 1);
-    var occluded = 0.0;
+    // Project light to screen UV + view depth
+    let lOff = lightPos - camPos;
+    let lViewZ = dot(lOff, fwd);
+    if (lViewZ <= 0.0) {
+        return 1.0;
+    }
+    let lUV = vec2<f32>(
+        (dot(lOff, right) / (lViewZ * aspect * halfH)) * 0.5 + 0.5,
+        (dot(lOff, up) / (lViewZ * -halfH)) * 0.5 + 0.5
+    );
 
-    for (var j = 1; j <= steps; j = j + 1) {
-        let subPos = samplePos + dir * (f32(j) * substep);
-        let offset = subPos - camPos;
-        let viewZ = dot(offset, fwd);
-        if (viewZ <= 0.0) {
+    // Adaptive step count: ~1 step per 4 pixels, minimum user steps, cap at 4x
+    let screenPixels = length((lUV - sUV) / pxSize);
+    let actualSteps = min(max(steps, i32(screenPixels * 0.25)), steps * 4);
+
+    // March in screen space — uniform UV steps, perspective-correct depth
+    let invSZ = 1.0 / sViewZ;
+    let invLZ = 1.0 / lViewZ;
+    for (var j = 1; j <= actualSteps; j = j + 1) {
+        let frac = f32(j) / f32(actualSteps + 1);
+        let uv = mix(sUV, lUV, frac);
+        if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) {
             continue;
         }
 
-        let viewX = dot(offset, right);
-        let viewY = dot(offset, up);
-        let uvX = (viewX / (viewZ * aspect * halfH)) * 0.5 + 0.5;
-        let uvY = (viewY / (viewZ * -halfH)) * 0.5 + 0.5;
-        if (uvX < 0.0 || uvX > 1.0 || uvY < 0.0 || uvY > 1.0) {
-            continue;
-        }
-
-        let texUV = srcSt + (srcEn - srcSt) * vec2<f32>(uvX, uvY);
+        let expectedZ = 1.0 / mix(invSZ, invLZ, frac);
+        let texUV = srcSt + (srcEn - srcSt) * uv;
         let bufferZ = c3_linearizeDepth(textureSample(textureDepth, samplerDepth, texUV));
-        if (bufferZ < viewZ - bias) {
-            occluded = occluded + 1.0;
+        if (bufferZ < expectedZ - bias) {
+            return 0.0;
         }
     }
 
-    return 1.0 - occluded / f32(steps);
+    return 1.0;
 }
 
 @fragment
@@ -184,15 +196,8 @@ fn main(input : FragmentInput) -> FragmentOutput
     let lightDir = normalize(vec3<f32>(shaderParams.light1DirX, shaderParams.light1DirY, -shaderParams.light1DirZ));
     let lightColor = shaderParams.light1Color * shaderParams.light1Intensity;
 
-    // Light occlusion: is the light behind geometry along this pixel's ray?
-    let lightT = dot(lightPos - camPos, rayDir);
+    // Ray march setup — depth-limited to stop at solid surfaces
     let maxRayDist = zLinear / dot(rayDir, forward);
-    if (lightT > maxRayDist && shaderParams.debugMode < 0.5) {
-        output.color = vec4<f32>(back.rgb, back.a);
-        return output;
-    }
-
-    // Ray march setup — clamp to avoid sky blowout
     let maxDist = min(maxRayDist, c3Params.zFar * 0.99);
     let stepSize = maxDist / f32(STEPS);
     let jitter = bayerDither4x4(input.fragPos.xy);
@@ -228,10 +233,11 @@ fn main(input : FragmentInput) -> FragmentOutput
         }
         var shadow = 1.0;
         if (shaderParams.light1Shadow > 0.001 && atten > 0.001) {
-            let ssteps = i32(clamp(shaderParams.light1ShadowSteps, 1.0, 32.0));
-            shadow = mix(1.0, screenSpaceShadow(samplePos, lightPos,
+            let ssteps = i32(clamp(shaderParams.light1ShadowSteps, 1.0, 16.0));
+            shadow = screenSpaceShadow(samplePos, lightPos,
                          camPos, forward, right, up, halfH, aspect,
-                         c3Params.srcStart, c3Params.srcEnd, ssteps, shaderParams.light1ShadowBias), shaderParams.light1Shadow);
+                         c3Params.srcStart, c3Params.srcEnd, c3Params.pixelSize,
+                         ssteps, shaderParams.light1ShadowBias);
         }
         scatter = scatter + atten * shadow * lightColor;
         // Dust: accumulate color and opacity for opaque blending
